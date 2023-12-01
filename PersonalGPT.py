@@ -120,8 +120,11 @@ def create_chat_title():
     system_title_content = """You are a chatbot to create a chat title from user input, for example, if user input "what is clustering", you give a title "Clustering Explanation". Make sure to use a proper word for the title. Keep it simple and don't make the title too long. If user input an opening statement/question, like "hi", "how are you", etc, answer with "Personal AI Assistant"."""
     system_title_prompt = {"role": 'system', "content": system_title_content}
 
-    title_prompt = st.session_state.messages[-2]
-    title_messages = [system_title_prompt, {'role': 'user', 'content': title_prompt['content']}]
+    for messages in st.session_state.messages[:5]:
+        if messages['role'] == 'user':
+            title_prompt = messages['content']
+            
+    title_messages = [system_title_prompt, {'role': 'user', 'content': title_prompt}]
 
     title = ''
     response = client.chat.completions.create(
