@@ -169,6 +169,7 @@ with st.sidebar:
     browsing = st.toggle('Browsing')
 
     selected_audio = st.selectbox("TTS sound:", audio_options)
+    st.markdown('*Write "TTS: (text)" to use text-to-speech*')
 
 st.markdown("<h1 style='text-align: center;'>PersonalGPT</h1>", unsafe_allow_html=True)
 
