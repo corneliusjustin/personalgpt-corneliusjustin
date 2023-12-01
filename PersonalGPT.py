@@ -152,29 +152,32 @@ with st.sidebar:
             st.success('Proceed to entering your prompt message!', icon='👉')
             st.session_state.api_key = {'OPENAI_API_KEY': api_key}
 
-    if st.button('New Chat'):
-        reset_state()
-
-    select_model = st.toggle('GPT-4')
-    if not select_model:
-        model = 'gpt-3.5-turbo'
-        st.write("You are using **GPT-3.5**")
-    else:
-        model = 'gpt-4-1106-preview'
-        st.write("You are using **GPT-4**")
-        
-    st.session_state["openai_model"] = model
-
-    temperature = st.slider('Model Temperature', 0.0, 2.0, 1.0, 0.01, label_visibility='collapsed')
-    browsing = st.toggle('Browsing')
-
-    selected_audio = st.selectbox("TTS sound:", audio_options)
-    st.markdown('*Write "TTS: (text)" to use text-to-speech*')
-
-st.markdown("<h1 style='text-align: center;'>PersonalGPT</h1>", unsafe_allow_html=True)
 
 try:
+    openai.api_key = st.session_state.api_key['OPENAI_API_KEY']
     client = OpenAI(api_key=st.session_state.api_key['OPENAI_API_KEY'])
+
+    with st.sidebar:
+        if st.button('New Chat'):
+            reset_state()
+
+        select_model = st.toggle('GPT-4')
+        if not select_model:
+            model = 'gpt-3.5-turbo'
+            st.write("You are using **GPT-3.5**")
+        else:
+            model = 'gpt-4-1106-preview'
+            st.write("You are using **GPT-4**")
+            
+        st.session_state["openai_model"] = model
+
+        temperature = st.slider('Model Temperature', 0.0, 2.0, 1.0, 0.01, label_visibility='collapsed')
+        browsing = st.toggle('Browsing')
+
+        selected_audio = st.selectbox("TTS sound:", audio_options)
+        st.markdown('*Write "TTS: (text)" to use text-to-speech*')
+
+    st.markdown("<h1 style='text-align: center;'>PersonalGPT</h1>", unsafe_allow_html=True)
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
