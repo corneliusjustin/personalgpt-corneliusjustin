@@ -1,5 +1,9 @@
-altair
-numpy
-pandas
-pydeck
-streamlit
+openai 
+pandas 
+numpy 
+python-dotenv 
+streamlit 
+tiktoken 
+ipython 
+ipykernel 
+googlesearch-python
