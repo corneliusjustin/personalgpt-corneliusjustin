@@ -141,43 +141,42 @@ def create_chat_title():
 model_options = ["GPT-3.5", "GPT-4"]
 audio_options = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer']
 
-with st.sidebar:
-    if 'api_key' in st.session_state:
-        st.success('API key already provided!', icon='✅')
-    else:
-        api_key = st.text_input('Enter OpenAI API token:', type='password')
-        if not (api_key.startswith('sk-') and len(api_key)==51):
-            st.warning('Please enter your credentials!', icon='⚠️')
-        else:
-            st.success('Proceed to entering your prompt message!', icon='👉')
-            st.session_state.api_key = {'OPENAI_API_KEY': api_key}
+st.markdown("<h1 style='text-align: center;'>PersonalGPT</h1>", unsafe_allow_html=True)
 
+if 'api_key' in st.session_state:
+    with st.sidebar:
+        st.success('API key provided!', icon='✅')
+else:
+    api_key = st.text_input('Enter OpenAI API token:', type='password')
+    if not (api_key.startswith('sk-') and len(api_key)==51):
+        st.warning('Please enter your credentials!', icon='⚠️')
+    else:
+        st.success('Proceed to entering your prompt message!', icon='👉')
+        st.session_state.api_key = {'OPENAI_API_KEY': api_key}
+
+with st.sidebar:
+    if st.button('New Chat'):
+        reset_state()
+
+    select_model = st.toggle('GPT-4')
+    if not select_model:
+        model = 'gpt-3.5-turbo'
+        st.write("You are using **GPT-3.5**")
+    else:
+        model = 'gpt-4-1106-preview'
+        st.write("You are using **GPT-4**")
+        
+    st.session_state["openai_model"] = model
+
+    temperature = st.slider('Model Temperature', 0.0, 2.0, 1.0, 0.01, label_visibility='collapsed')
+    browsing = st.toggle('Browsing')
+
+    selected_audio = st.selectbox("TTS sound:", audio_options)
+    st.markdown('*Write "TTS: (text)" to use text-to-speech*')
 
 try:
     openai.api_key = st.session_state.api_key['OPENAI_API_KEY']
     client = OpenAI(api_key=st.session_state.api_key['OPENAI_API_KEY'])
-
-    with st.sidebar:
-        if st.button('New Chat'):
-            reset_state()
-
-        select_model = st.toggle('GPT-4')
-        if not select_model:
-            model = 'gpt-3.5-turbo'
-            st.write("You are using **GPT-3.5**")
-        else:
-            model = 'gpt-4-1106-preview'
-            st.write("You are using **GPT-4**")
-            
-        st.session_state["openai_model"] = model
-
-        temperature = st.slider('Model Temperature', 0.0, 2.0, 1.0, 0.01, label_visibility='collapsed')
-        browsing = st.toggle('Browsing')
-
-        selected_audio = st.selectbox("TTS sound:", audio_options)
-        st.markdown('*Write "TTS: (text)" to use text-to-speech*')
-
-    st.markdown("<h1 style='text-align: center;'>PersonalGPT</h1>", unsafe_allow_html=True)
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
@@ -303,4 +302,4 @@ try:
                     json.dump(json_temp, f)
 
 except:
-    st.warning('Please enter your credentials!', icon='⚠️')
+    pass
