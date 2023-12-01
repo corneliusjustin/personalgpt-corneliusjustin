@@ -117,7 +117,7 @@ def reset_state():
             del st.session_state[key]
 
 def create_chat_title():
-    system_title_content = """You are a chatbot to create a chat title from user input, for example, if user input "what is clustering", you give a title "Clustering Explanation". Make sure to use a proper word for the title. Keep it simple and don't make the title too long. If user input an opening statement/question, like "hi", "how are you", etc, answer with "Personal AI Assistant"."""
+    system_title_content = """You are a chatbot to create a chat title from user input, for example, if user input "what is clustering", you give a title "Clustering Explanation". Another example, user input "tell me about latest AI news", you give "Latest AI News Update" or something like that. Make sure to use a proper word for the title. Keep it simple and don't make the title too long. If user input an opening statement/question, like "hi", "how are you", etc, answer with "Personal AI Assistant"."""
     system_title_prompt = {"role": 'system', "content": system_title_content}
 
     for messages in st.session_state.messages[:5]:
