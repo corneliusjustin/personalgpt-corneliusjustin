@@ -123,6 +123,7 @@ def create_chat_title():
     for messages in st.session_state.messages[:5]:
         if messages['role'] == 'user':
             title_prompt = messages['content']
+            break
             
     title_messages = [system_title_prompt, {'role': 'user', 'content': title_prompt}]
 
