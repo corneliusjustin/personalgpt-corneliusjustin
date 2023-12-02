@@ -60,49 +60,41 @@ def scrape_gpt(user_input):
     
     return full_web_content
 
-tools = [
-    {
-        "type": "function",
-        "function": {
-            "name": "scrape_gpt",
-            "description": "Use this function to search answers from the internet.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "user_input": {
-                        "type": "string",
-                        "description": "The search queries that you want to browse. Make sure to use optimized search queries.",
+def get_completion(use_browsing=False, stream=True):
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "scrape_gpt",
+                "description": "Use this function to search answers from the internet.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "user_input": {
+                            "type": "string",
+                            "description": "The search queries that you want to browse. Make sure to use optimized search queries.",
+                        },
                     },
+                    "required": ["user_input"],
                 },
-                "required": ["user_input"],
-            },
+            }
         }
-    }
-]
-
-def get_completion(use_tools=False, stream=True):
-    if not use_tools:
-        completion = client.chat.completions.create(
-                        model=st.session_state["openai_model"],
-                        messages=[
-                            {"role": m["role"], "content": m["content"]}
-                            for m in st.session_state.messages
-                        ],
-                        temperature=temperature,
-                        stream=stream,
-                    )
-    else:
-        
-        completion = client.chat.completions.create(
-                        model=st.session_state["openai_model"],
-                        messages=[
-                            {"role": m["role"], "content": m["content"]}
-                            for m in st.session_state.messages
-                        ],
-                        temperature=temperature,
-                        tools=tools,
-                        stream=stream,
-                    )
+    ]
+    
+    tool_choice = 'auto' if use_browsing else 'none'
+    
+    completion = client.chat.completions.create(
+        model=st.session_state["openai_model"],
+        messages=[
+            {"role": m["role"], "content": m["content"]}
+            for m in st.session_state.messages
+        ],
+        temperature=temperature,
+        tools=tools,
+        tool_choice=tool_choice,
+        stream=stream
+    )
+    
     return completion
 
 def num_tokens_from_string(string: str, encoding_name: str) -> int:
@@ -185,7 +177,7 @@ try:
     if "messages" not in st.session_state:
         st.session_state.messages = []
         
-        system_prompt = """You are a helpful and respectful AI assistant"""
+        system_prompt = """You are a helpful and respectful AI assistant. You don't have ability to browse the internet, unless there's a system prompt after this telling you that you are able"""
         st.session_state.messages.append({"role": "system", "content": system_prompt, 'audio': None})
 
     if len(st.session_state.messages) < 3:
@@ -243,7 +235,7 @@ try:
                         full_response += (response.choices[0].delta.content or "")
                         message_placeholder.markdown(full_response + "▌")
                 else:
-                    completion = get_completion(use_tools=True)
+                    completion = get_completion(use_browsing=True)
 
                     search_query = ""
                     for response in completion:
@@ -264,7 +256,7 @@ try:
 
                         st.session_state.messages.append({'role': 'user', 'content': f"```WEB CONTEXT {web_content}```", 'audio': None})
 
-                        completion_browse = get_completion(use_tools=False)
+                        completion_browse = get_completion(use_browsing=False)
                         for response_browse in completion_browse:
                             full_response += (response_browse.choices[0].delta.content or "")
                             message_placeholder.markdown(full_response + "▌")
@@ -290,7 +282,7 @@ try:
 
     num_tokens = num_tokens_from_string(full_message, "cl100k_base")
 
-    if (not browsing and num_tokens > 9) or (browsing and num_tokens > 159):
+    if (not browsing and num_tokens > 34) or (browsing and num_tokens > 184):
         with st.sidebar: 
             st.write(f'Total tokens: {num_tokens}')
             
