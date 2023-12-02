@@ -156,7 +156,7 @@ with st.sidebar:
 
     select_model = st.toggle('GPT-4')
     if not select_model:
-        model = 'gpt-3.5-turbo'
+        model = 'gpt-3.5-turbo-1106'
         st.write("You are using **GPT-3.5**")
     else:
         model = 'gpt-4-1106-preview'
