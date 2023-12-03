@@ -109,7 +109,7 @@ def reset_state():
             del st.session_state[key]
 
 def create_chat_title():
-    system_title_content = """You are an expert to create a chat title from user input for chatbot app, for example, if user input "what is clustering", you give a title "Clustering Explanation". Another example, user input "tell me about latest AI news", you give "Latest AI News Update" or something like that. Make sure to use a proper word for the title. Keep it simple and don't make the title too long. If user input an opening statement/question, like "hi", "how are you", etc, answer with "Personal AI Assistant"."""
+    system_title_content = """You are an expert to create a chat title from user input for chatbot app, for example, if user input "what is clustering", you give a title "Clustering Explanation". Another example, user input "tell me about latest AI news", you give "Latest AI News Update" or something like that. Make sure to use a proper word for the title. Keep it simple and don't make the title too long. If user input an opening statement/question, like "hi", "how are you", etc, answer with "Personal AI Assistant". You are not a question answer bot, don't answer user's question, instead create a title from user question."""
     system_title_prompt = {"role": 'system', "content": system_title_content}
 
     for messages in st.session_state.messages[:5]:
@@ -123,7 +123,7 @@ def create_chat_title():
     response = client.chat.completions.create(
         model='gpt-3.5-turbo',
         messages=title_messages,
-        temperature=1,
+        temperature=0.3,
         stream=True
     )
     for resp in response:
@@ -179,16 +179,12 @@ try:
         
         system_prompt = """You are a helpful and respectful AI assistant. You don't have ability to browse the internet, unless there's a system prompt after this telling you that you are able"""
         st.session_state.messages.append({"role": "system", "content": system_prompt, 'audio': None})
-
-    if len(st.session_state.messages) < 3:
+    
+    if 'title' not in st.session_state:
         title_placeholder = st.empty()
     else:
-        if type(st.session_state.title) == list:
-            chat_title = st.session_state.title[0]
-        else:
-            chat_title = st.session_state.title
+        st.markdown(f"<h5 style='text-align: center;'>{st.session_state.title[0]}</h5>", unsafe_allow_html=True)
 
-        st.markdown(f"<h5 style='text-align: center;'>{chat_title}</h5>", unsafe_allow_html=True)
     for message in st.session_state.messages:
         if message['role'] != 'system' and message['content'][:14] != '```WEB CONTEXT':
             if message['audio'] == None:
@@ -250,8 +246,9 @@ try:
                     
                     if len(search_query) != 0:
                         user_input = json.loads(search_query)['user_input']
-                        message_placeholder.markdown(f'*Browsing Google... ({user_input})*')
-                        web_content = scrape_gpt(user_input)
+                        with st.spinner(f'*Browsing Google... ({user_input})*'):
+                            web_content = scrape_gpt(user_input)
+
                         message_placeholder.markdown(f'*Finish Browsing. Total web content tokens: {num_tokens_from_string(web_content, "cl100k_base")}*')
 
                         st.session_state.messages.append({'role': 'user', 'content': f"```WEB CONTEXT {web_content}```", 'audio': None})
@@ -267,12 +264,7 @@ try:
 
 
     if 2 < len(st.session_state.messages) <= 5:
-        try:
-            if type(st.session_state.title) == list:
-                st.session_state.title = st.session_state.title[0]
-            else:
-                pass
-        except:
+        if 'title' not in st.session_state: 
             st.session_state.title = []
             create_chat_title()
 
