@@ -247,6 +247,7 @@ try:
                     if len(search_query) != 0:
                         user_input = json.loads(search_query)['user_input']
                         with st.spinner(f'*Browsing Google... ({user_input})*'):
+                            st.text('you are here')
                             web_content = scrape_gpt(user_input)
 
                         message_placeholder.markdown(f'*Finish Browsing. Total web content tokens: {num_tokens_from_string(web_content, "cl100k_base")}*')
