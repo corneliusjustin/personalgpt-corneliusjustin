@@ -314,7 +314,7 @@ try:
 
     num_tokens = num_tokens_from_string(full_message, "cl100k_base")
 
-    if (not browsing and num_tokens > 34) or (browsing and num_tokens > 184):
+    if (not browsing and num_tokens > 35) or (browsing and num_tokens > 168):
         with st.sidebar: 
             st.write(f'Total tokens: {num_tokens}')
             
