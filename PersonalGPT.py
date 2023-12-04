@@ -97,6 +97,76 @@ def get_completion(use_browsing=False, stream=True):
     
     return completion
 
+def get_stream_full_response(completion):
+
+    available_functions = {
+        'scrape_gpt': scrape_gpt
+    }
+
+    full_response = ""
+    tool_calls_args = []
+    tool_calls_arg = ""
+    function_names = []
+    tool_call_ids = []
+    idx_temp = 0
+
+    for response in completion:
+        content = response.choices[0].delta.content
+        finish = response.choices[0].finish_reason
+        if content != None or full_response != "":
+            full_response += (response.choices[0].delta.content or "")
+            
+            if finish:
+                assistant_response = {'role': 'assistant', 'content': full_response, 'audio': None}
+                st.session_state.messages.append(assistant_response)
+                
+                return full_response
+            else:
+                message_placeholder.markdown(full_response + "▌")
+        
+        elif content == None and full_response == "":
+            tool_calls = response.choices[0].delta.tool_calls
+            
+            if tool_calls:
+                function_name = tool_calls[0].function.name
+                tool_call_id = tool_calls[0].id
+                if function_name:
+                    function_names.append(function_name)
+                    tool_call_ids.append(tool_call_id)
+
+                tool_index = tool_calls[0].index
+                if tool_index > idx_temp:
+                    tool_calls_args.append(tool_calls_arg)
+                    tool_calls_arg = ""
+                    idx_temp += 1
+
+                tool_calls_arg += tool_calls[0].function.arguments
+            
+            elif finish:
+                tool_calls_args.append(tool_calls_arg)
+    
+    if len(tool_calls_args) != 0:
+        for i, function_name in enumerate(function_names):
+            function_to_call = available_functions[function_name]
+            function_arg = json.loads(tool_calls_args[i])
+
+            with st.spinner(f'*Browsing Google... ({list(function_arg.values())[0]})*'):
+                function_response = function_to_call(**function_arg)
+            
+            message_placeholder.markdown(f'*Finish retreiving knowledge. Total context tokens: {num_tokens_from_string(function_response, "cl100k_base")}*')
+
+            st.session_state.messages.append(
+                {
+                    'role': 'system',
+                    "content": f"QUERY:\n{function_arg}\n\nTOOL RESPONSE:\n{function_response}",
+                    'audio': None
+                }
+            )
+
+        completion_func = get_completion(use_browsing=True)
+
+        return get_stream_full_response(completion_func)
+
 def num_tokens_from_string(string: str, encoding_name: str) -> int:
     """Returns the number of tokens in a text string."""
     encoding = tiktoken.get_encoding(encoding_name)
@@ -197,7 +267,7 @@ try:
     prompt = st.chat_input("Say something...")
     if prompt:
         if browsing and len(st.session_state.messages) == 1:
-            st.session_state.messages.append({'role': 'system', 'content': 'You have ability to browse the internet using function. If you are unsure about your answer, or the user ask for real time factual data, use your ability to search the internet. Provide a good and optimized search query when searching the internet. If the user have some texts inside triple backticks starting with WEB CONTEXT  (```WEB CONTEXT ...```) after their question, that string inside the triple backticks is the answer from the internet, so you don\'t need to call the browsing function. All of the answers from the internet is updated, so don\'t assume your knowledge is true because it isn\'t updated. If user ask you for follow up question that are cannot be answered from the previous web searching, then search it again through the internet.', 'audio': None})
+            st.session_state.messages.append({'role': 'system', 'content': 'You have ability to browse the internet using function. If you are unsure about your answer, or the user ask for real time factual data, use your ability to search the internet. Provide a good and optimized search query when searching the internet. If system with "QUERY" and "TOOL RESPONSE", that\'s the response from the tool that you call, so you don\'t need to call the browsing function. All of the answers from the internet is updated, so don\'t assume your knowledge is true because it isn\'t updated. If user ask you for follow up question that are cannot be answered from the previous web searching, then search it again through the internet.', 'audio': None})
 
         st.session_state.messages.append({"role": "user", "content": prompt, 'audio': None})
         with st.chat_message("user"):
@@ -222,45 +292,15 @@ try:
         else:
             with st.chat_message("assistant"):
                 message_placeholder = st.empty()
-                full_response = ""
 
                 if not browsing:
                     completion = get_completion()
 
-                    for response in completion:
-                        full_response += (response.choices[0].delta.content or "")
-                        message_placeholder.markdown(full_response + "▌")
                 else:
                     completion = get_completion(use_browsing=True)
 
-                    search_query = ""
-                    for response in completion:
-                        if response.choices[0].delta.content != None:
-                            full_response += (response.choices[0].delta.content or "")
-                            message_placeholder.markdown(full_response + "▌")
-                        elif response.choices[0].delta.content == None and full_response == "":
-                            word_query = response.choices[0].delta.tool_calls
-                            if word_query:
-                                search_query += word_query[0].function.arguments
-                                continue
-                    
-                    if len(search_query) != 0:
-                        user_input = json.loads(search_query)['user_input']
-                        with st.spinner(f'*Browsing Google... ({user_input})*'):
-                            web_content = scrape_gpt(user_input)
-
-                        message_placeholder.markdown(f'*Finish Browsing. Total web content tokens: {num_tokens_from_string(web_content, "cl100k_base")}*')
-
-                        st.session_state.messages.append({'role': 'user', 'content': f"```WEB CONTEXT {web_content}```", 'audio': None})
-
-                        completion_browse = get_completion(use_browsing=False)
-                        for response_browse in completion_browse:
-                            full_response += (response_browse.choices[0].delta.content or "")
-                            message_placeholder.markdown(full_response + "▌")
-
+                full_response = get_stream_full_response(completion)
                 message_placeholder.markdown(full_response)
-                
-            st.session_state.messages.append({"role": "assistant", "content": full_response, 'audio': None})
 
 
     if 2 < len(st.session_state.messages) <= 5:
