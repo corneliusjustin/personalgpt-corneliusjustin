@@ -60,47 +60,86 @@ def scrape_gpt(user_input):
     
     return full_web_content
 
+def speak_gpt(message):
+    response = openai.audio.speech.create(
+        model="tts-1",
+        voice=selected_audio,
+        input=message,
+        speed=speech_speed
+    )
+
+    audio = b""
+    for chunk in response.iter_bytes(chunk_size=1024 * 1024):
+        audio += chunk
+
+    return audio
+
 def get_completion(use_browsing=False, stream=True):
     tools = [
         {
-            "type": "function",
-            "function": {
-                "name": "scrape_gpt",
-                "description": "Use this function to search answers from the internet.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "user_input": {
-                            "type": "string",
-                            "description": "The search queries that you want to browse. Make sure to use optimized search queries.",
-                        },
-                    },
-                    "required": ["user_input"],
-                },
+            'type': 'function',
+            'function': {
+                'name': 'speak_gpt',
+                'description': 'Use this function to generate audio speech for your answers.',
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'message': {
+                            'type': 'string',
+                            'description': 'Your answer that you want to convert into audio speech. Make sure you are using correct punctuation for speech.'
+                        }
+                    }
+                }
             }
         }
     ]
+
+    if use_browsing:
+        tools.append(
+            {
+                "type": "function",
+                "function": {
+                    "name": "scrape_gpt",
+                    "description": "Use this function to search answers from the internet.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "user_input": {
+                                "type": "string",
+                                "description": "The search queries that you want to browse. Make sure to use optimized search queries.",
+                            },
+                        },
+                        "required": ["user_input"],
+                    },
+                }
+            }
+        )
     
-    tool_choice = 'auto' if use_browsing else 'none'
+    tool_choice = 'auto'
     
-    completion = client.chat.completions.create(
-        model=st.session_state["openai_model"],
-        messages=[
-            {"role": m["role"], "content": m["content"]}
-            for m in st.session_state.messages
-        ],
-        temperature=temperature,
-        tools=tools,
-        tool_choice=tool_choice,
-        stream=stream
-    )
+    if st.session_state.messages[-1]['audio'] != None:
+        return st.session_state.messages[-1]['audio']
     
-    return completion
+    else:
+        completion = client.chat.completions.create(
+            model=st.session_state["openai_model"],
+            messages=[
+                {"role": m["role"], "content": m["content"]}
+                for m in st.session_state.messages
+            ],
+            temperature=temperature,
+            tools=tools,
+            tool_choice=tool_choice,
+            stream=stream
+        )
+        
+        return completion
 
 def get_stream_full_response(completion):
 
     available_functions = {
-        'scrape_gpt': scrape_gpt
+        'scrape_gpt': scrape_gpt,
+        'speak_gpt': speak_gpt
     }
 
     full_response = ""
@@ -109,7 +148,7 @@ def get_stream_full_response(completion):
     function_names = []
     tool_call_ids = []
     idx_temp = 0
-
+    
     for response in completion:
         content = response.choices[0].delta.content
         finish = response.choices[0].finish_reason
@@ -145,10 +184,10 @@ def get_stream_full_response(completion):
             elif finish:
                 tool_calls_args.append(tool_calls_arg)
     
-    if len(tool_calls_args) != 0:
-        for i, function_name in enumerate(function_names):
-            function_to_call = available_functions[function_name]
-            function_arg = json.loads(tool_calls_args[i])
+    for i, function_name in enumerate(function_names):
+        function_to_call = available_functions[function_name]
+        function_arg = json.loads(tool_calls_args[i])
+        if function_name == 'scrape_gpt':
 
             with st.spinner(f'*Browsing Google... ({list(function_arg.values())[0]})*'):
                 function_response = function_to_call(**function_arg)
@@ -158,15 +197,30 @@ def get_stream_full_response(completion):
             st.session_state.messages.append(
                 {
                     'role': 'system',
-                    "content": f"QUERY:\n{function_arg}\n\nTOOL RESPONSE:\n{function_response}",
+                    "content": f"QUERY:\n{function_arg['user_input']}\n\nTOOL RESPONSE:\n{function_response}",
                     'audio': None
                 }
             )
 
+        elif function_name == 'speak_gpt':
+            with st.spinner(f'*Generating speech...*'):
+                function_response = function_to_call(**function_arg)
+
+            st.session_state.messages.append(
+                {
+                    'role': 'system',
+                    'content': f"TOOL RESPONSE: {function_arg['message']}\n\n{st.session_state.speak_prompt}",
+                    'audio': function_response 
+                }
+            )
+
+    if st.session_state.messages[-1]['audio'] != None:
+        return function_response
+    
+    else:
         completion_func = get_completion(use_browsing=True)
-
         return get_stream_full_response(completion_func)
-
+    
 def num_tokens_from_string(string: str, encoding_name: str) -> int:
     """Returns the number of tokens in a text string."""
     encoding = tiktoken.get_encoding(encoding_name)
@@ -235,10 +289,16 @@ with st.sidebar:
     st.session_state["openai_model"] = model
 
     temperature = st.slider('Model Temperature', 0.0, 2.0, 1.0, 0.01, label_visibility='collapsed')
-    browsing = st.toggle('Browsing')
+    
+    browsing = st.toggle('Browsing GPT')
+    speak = st.toggle('Speech GPT')
 
     selected_audio = st.selectbox("TTS sound:", audio_options)
-    st.markdown('*Write "TTS: (text)" to use text-to-speech*')
+    speech_speed = st.slider('Speech speed:', 0.25, 4.0, 1.0, 0.01)
+
+    info = st.expander('More info')
+    with info:
+        st.info('Write "TTS: (text)" to use straightforward text-to-speech')
 
 try:
     openai.api_key = st.session_state.api_key['OPENAI_API_KEY']
@@ -246,28 +306,38 @@ try:
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
-        
-        system_prompt = """You are a helpful and respectful AI assistant. You don't have ability to browse the internet, unless there's a system prompt after this telling you that you are able"""
-        st.session_state.messages.append({"role": "system", "content": system_prompt, 'audio': None})
-    
+
     if 'title' not in st.session_state:
         title_placeholder = st.empty()
     else:
         st.markdown(f"<h5 style='text-align: center;'>{st.session_state.title[0]}</h5>", unsafe_allow_html=True)
 
     for message in st.session_state.messages:
-        if message['role'] != 'system' and message['content'][:14] != '```WEB CONTEXT':
+        if message['role'] != 'system' or message['audio'] != None:
             if message['audio'] == None:
                 with st.chat_message(message["role"]):
                     st.markdown(message["content"])
             else:
-                with st.chat_message(message["role"]):
+                with st.chat_message('assistant'):
                     st.audio(message["audio"], format='audio/mp3')
 
     prompt = st.chat_input("Say something...")
     if prompt:
-        if browsing and len(st.session_state.messages) == 1:
-            st.session_state.messages.append({'role': 'system', 'content': 'You have ability to browse the internet using function. If you are unsure about your answer, or the user ask for real time factual data, use your ability to search the internet. Provide a good and optimized search query when searching the internet. If system with "QUERY" and "TOOL RESPONSE", that\'s the response from the tool that you call, so you don\'t need to call the browsing function. All of the answers from the internet is updated, so don\'t assume your knowledge is true because it isn\'t updated. If user ask you for follow up question that are cannot be answered from the previous web searching, then search it again through the internet.', 'audio': None})
+        if len(st.session_state.messages) == 0:
+            
+            if browsing:
+                browsing_prompt = 'You have ability to browse the internet using function. If you are unsure about your answer, or the user ask for real time factual data, use your ability to search the internet. Provide a good and optimized search query when searching the internet. If system with "QUERY" and "TOOL RESPONSE", that\'s the response from the tool that you call, so you don\'t need to call the browsing function. All of the answers from the internet is updated, so don\'t assume your knowledge is true because it isn\'t updated. If user ask you for follow up question that are cannot be answered from the previous web searching, then search it again through the internet.'
+            else:
+                browsing_prompt = "You don't have ability to browse the internet by default, unless there's a prompt after this telling you that you are able. Don't tell the user that u have ability to browse the internet because it's a fake response"
+            
+            if speak:
+                st.session_state.speak_prompt = "ALWAYS use speech (use function tools) for every user's question or input. Whatever user's input, SPEAK!"
+            else:
+                st.session_state.speak_prompt = f"Speak if the user want you to speak."
+
+            system_prompt = f"""You are a helpful and respectful AI assistant.\n\n{browsing_prompt}.\n\nYou have the ability to speak or generate speech through function for answering user's questions. {st.session_state.speak_prompt}"""
+
+            st.session_state.messages.append({"role": "system", "content": system_prompt, 'audio': None})
 
         st.session_state.messages.append({"role": "user", "content": prompt, 'audio': None})
         with st.chat_message("user"):
@@ -300,10 +370,14 @@ try:
                     completion = get_completion(use_browsing=True)
 
                 full_response = get_stream_full_response(completion)
-                message_placeholder.markdown(full_response)
+                
+                if st.session_state.messages[-1]['audio'] != None:
+                    message_placeholder.audio(full_response, format='audio/mp3')
+                else:
+                    message_placeholder.markdown(full_response)
 
 
-    if 2 < len(st.session_state.messages) <= 5:
+    if len(st.session_state.messages) == 3:
         if 'title' not in st.session_state: 
             st.session_state.title = []
             create_chat_title()
@@ -314,7 +388,7 @@ try:
 
     num_tokens = num_tokens_from_string(full_message, "cl100k_base")
 
-    if (not browsing and num_tokens > 35) or (browsing and num_tokens > 168):
+    if len(st.session_state.messages) != 0 and (st.session_state.messages[-1]['role'] == 'assistant' or st.session_state.messages[-1]['audio']) != None :
         with st.sidebar: 
             st.write(f'Total tokens: {num_tokens}')
             
