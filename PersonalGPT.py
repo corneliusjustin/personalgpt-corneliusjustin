@@ -8,9 +8,10 @@ from googlesearch import search
 from bs4 import BeautifulSoup
 import requests
 import re
+import numpy as np
 
 def get_url(input):
-    urls = search(input, num_results=2)
+    urls = search(input, num_results=3)
     urls = list(set(url for url in urls))
     return urls
 
@@ -41,22 +42,77 @@ def clean_text(text):
     
     return text
 
+def cosine_similarity(query, document):
+    """
+    query: 1 x d_model
+    document: n_chunks x d_model
+    """
+
+    # Calculate the dot product between each row of A and v
+    dot_product = np.dot(document, query.T)
+
+    # Calculate the norms of each row of A and v
+    norm_document = np.linalg.norm(document, axis=1)
+    norm_query = np.linalg.norm(query)
+
+    # Calculate the cosine similarity
+    cosine_similarity = dot_product.ravel() / (norm_document * norm_query)
+
+    # Print the result
+    return cosine_similarity
+
+def chunk_webcontent(webcontent, chunk_size, overlap):
+    encoder = tiktoken.get_encoding('cl100k_base')
+    tokens = encoder.encode(webcontent)
+    chunks = [''.join(encoder.decode(tokens[i:i+chunk_size])) for i in range(0, len(tokens) - chunk_size + 1, chunk_size - overlap)]
+    return chunks
+
+def create_embeddings_from_web(webcontent, chunk_size=256, overlap=30):
+
+    web_text_chunks = chunk_webcontent(webcontent, chunk_size, overlap)
+
+    embeddings = client.embeddings.create(
+        model="text-embedding-ada-002",
+        input=web_text_chunks
+    )
+
+    web_embeddings = []
+
+    for embedding in embeddings.data:
+        web_embeddings.append(embedding.embedding)
+
+    return web_embeddings, web_text_chunks
+
 def scrape_gpt(user_input):
-    encoding = tiktoken.get_encoding('cl100k_base')
     urls = get_url(user_input)
+    input_emb = client.embeddings.create(
+        model="text-embedding-ada-002",
+        input=user_input
+    ).data[0].embedding
     
     full_web_content = ""
-    for i, url in enumerate(urls):
+    web_embeddings = []
+    web_text_chunks = []
+    for url in urls:
         try:
-            web_content = scrape_website(url)[1]
+            url, web_content = scrape_website(url)
             clean_web_content = clean_text(web_content)
-            encode = encoding.encode(clean_web_content)
-            clean_web_content = encoding.decode(encode[:500])
+            web_emb, web_chunk = create_embeddings_from_web(clean_web_content)
+            for emb in web_emb:
+                web_embeddings.append(emb)
+            for chunk in web_chunk:
+                c = chunk + f'\nURL: {url}'
+                web_text_chunks.append(c)
 
-            full_web_content += f'WEB {i+1}: ' + clean_web_content + f'\nURL: {url}\n\n'
         except:
             continue
-    
+        
+    web_embeddings = np.array(web_embeddings)
+    web_text_chunks = np.array(web_text_chunks)
+    similarity = cosine_similarity(np.array(input_emb).reshape(1,-1), web_embeddings)
+    top_3_chunks = web_text_chunks[np.argsort(similarity)[-4:]]
+
+    full_web_content = '\n\n'.join(top_3_chunks)
     
     return full_web_content
 
@@ -392,16 +448,20 @@ try:
         with st.sidebar: 
             st.write(f'Total tokens: {num_tokens}')
             
-            # if st.button('Save Chat'):
-            #     json_temp = {}
-            #     for i, msg in enumerate(st.session_state.messages):
-            #         json_temp[i] = {'role': msg['role'], 'content': msg['content'], 'type': 'text' if msg['audio'] is None else 'audio'}
-
-            #     now = datetime.datetime.now()
-            #     date_now = now.strftime("%Y%m%d-%H%M%S.%f")
-            #     filename = f"history/chat_{date_now}"
-            #     with open(f'{filename}.json', 'w') as f:
-            #         json.dump(json_temp, f)
+            json_temp = {}
+            for i, msg in enumerate(st.session_state.messages):
+                json_temp[i] = {'role': msg['role'], 'content': msg['content'], 'type': 'text' if msg['audio'] is None else 'audio'}
+            
+            now = datetime.datetime.now()
+            date_now = now.strftime("%Y%m%d-%H%M%S.%f")
+            filename = f"chat_{date_now}"
+            json_file = json.dumps(json_temp)
+            
+            st.download_button(
+                label='Download Chat',
+                data=json_file,
+                file_name=f'{filename}.json'
+            )
 
 except:
     pass
