@@ -356,110 +356,110 @@ with st.sidebar:
     with info:
         st.info('Write "TTS: (text)" to use straightforward text-to-speech')
 
-#try:
-openai.api_key = st.session_state.api_key['OPENAI_API_KEY']
-client = OpenAI(api_key=st.session_state.api_key['OPENAI_API_KEY'])
+try:
+    openai.api_key = st.session_state.api_key['OPENAI_API_KEY']
+    client = OpenAI(api_key=st.session_state.api_key['OPENAI_API_KEY'])
 
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
 
-if 'title' not in st.session_state:
-    title_placeholder = st.empty()
-else:
-    st.markdown(f"<h5 style='text-align: center;'>{st.session_state.title[0]}</h5>", unsafe_allow_html=True)
+    if 'title' not in st.session_state:
+        title_placeholder = st.empty()
+    else:
+        st.markdown(f"<h5 style='text-align: center;'>{st.session_state.title[0]}</h5>", unsafe_allow_html=True)
 
-for message in st.session_state.messages:
-    if message['role'] != 'system' or message['audio'] != None:
-        if message['audio'] == None:
-            with st.chat_message(message["role"]):
-                st.markdown(message["content"])
-        else:
+    for message in st.session_state.messages:
+        if message['role'] != 'system' or message['audio'] != None:
+            if message['audio'] == None:
+                with st.chat_message(message["role"]):
+                    st.markdown(message["content"])
+            else:
+                with st.chat_message('assistant'):
+                    st.audio(message["audio"], format='audio/mp3')
+
+    prompt = st.chat_input("Say something...")
+    if prompt:
+        if len(st.session_state.messages) == 0:
+            
+            if browsing:
+                browsing_prompt = 'You have ability to browse the internet using function. If you are unsure about your answer, or the user ask for real time factual data, use your ability to search the internet. Provide a good and optimized search query when searching the internet. If system with "QUERY" and "TOOL RESPONSE", that\'s the response from the tool that you call, so you don\'t need to call the browsing function. All of the answers from the internet is updated, so don\'t assume your knowledge is true because it isn\'t updated. If user ask you for follow up question that are cannot be answered from the previous web searching, then search it again through the internet. Use browsing function over any other answers to generate answers. For example, if user want you to answer some question, then prioritize to use browsing function first, then answer the question.'
+            else:
+                browsing_prompt = "You don't have ability to browse the internet by default, unless there's a prompt after this telling you that you are able. Don't tell the user that u have ability to browse the internet because it's a fake response"
+            
+            if speak:
+                st.session_state.speak_prompt = "ALWAYS use speech (use function tools) for every user's question or input. Whatever user's input, SPEAK!"
+            else:
+                st.session_state.speak_prompt = f"Speak if the user want you to speak."
+
+            system_prompt = f"""You are a helpful and respectful AI assistant.\n\n{browsing_prompt}.\n\nYou have the ability to speak or generate speech through function for answering user's questions. {st.session_state.speak_prompt}"""
+
+            st.session_state.messages.append({"role": "system", "content": system_prompt, 'audio': None})
+
+        st.session_state.messages.append({"role": "user", "content": prompt, 'audio': None})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+        
+        if prompt[:4] == 'TTS:':
             with st.chat_message('assistant'):
-                st.audio(message["audio"], format='audio/mp3')
+                message_placeholder = st.empty()
+                response = openai.audio.speech.create(
+                    model="tts-1",
+                    voice=selected_audio,
+                    input=prompt[4:]
+                )
 
-prompt = st.chat_input("Say something...")
-if prompt:
-    if len(st.session_state.messages) == 0:
-        
-        if browsing:
-            browsing_prompt = 'You have ability to browse the internet using function. If you are unsure about your answer, or the user ask for real time factual data, use your ability to search the internet. Provide a good and optimized search query when searching the internet. If system with "QUERY" and "TOOL RESPONSE", that\'s the response from the tool that you call, so you don\'t need to call the browsing function. All of the answers from the internet is updated, so don\'t assume your knowledge is true because it isn\'t updated. If user ask you for follow up question that are cannot be answered from the previous web searching, then search it again through the internet. Use browsing function over any other answers to generate answers. For example, if user want you to answer some question, then prioritize to use browsing function first, then answer the question.'
+                audio = b""
+                for chunk in response.iter_bytes(chunk_size=1024 * 1024):
+                    audio += chunk
+
+                message_placeholder.audio(audio, format="audio/mp3")
+            st.session_state.messages.append({"role": "assistant", "content": prompt[4:], 'audio': audio})
+
         else:
-            browsing_prompt = "You don't have ability to browse the internet by default, unless there's a prompt after this telling you that you are able. Don't tell the user that u have ability to browse the internet because it's a fake response"
-        
-        if speak:
-            st.session_state.speak_prompt = "ALWAYS use speech (use function tools) for every user's question or input. Whatever user's input, SPEAK!"
-        else:
-            st.session_state.speak_prompt = f"Speak if the user want you to speak."
+            with st.chat_message("assistant"):
+                message_placeholder = st.empty()
 
-        system_prompt = f"""You are a helpful and respectful AI assistant.\n\n{browsing_prompt}.\n\nYou have the ability to speak or generate speech through function for answering user's questions. {st.session_state.speak_prompt}"""
+                if not browsing:
+                    completion = get_completion()
 
-        st.session_state.messages.append({"role": "system", "content": system_prompt, 'audio': None})
+                else:
+                    completion = get_completion(use_browsing=True)
 
-    st.session_state.messages.append({"role": "user", "content": prompt, 'audio': None})
-    with st.chat_message("user"):
-        st.markdown(prompt)
-    
-    if prompt[:4] == 'TTS:':
-        with st.chat_message('assistant'):
-            message_placeholder = st.empty()
-            response = openai.audio.speech.create(
-                model="tts-1",
-                voice=selected_audio,
-                input=prompt[4:]
+                full_response = get_stream_full_response(completion)
+                
+                if st.session_state.messages[-1]['audio'] != None:
+                    message_placeholder.audio(full_response, format='audio/mp3')
+                else:
+                    message_placeholder.markdown(full_response)
+
+    if len(st.session_state.messages) > 1 and 'title' not in st.session_state:
+        st.session_state.title = []
+        create_chat_title()
+
+    full_message = ""
+    for message in st.session_state.messages:
+        full_message += message['content'] + " "
+
+    num_tokens = num_tokens_from_string(full_message, "cl100k_base")
+
+    if len(st.session_state.messages) != 0 and (st.session_state.messages[-1]['role'] == 'assistant' or st.session_state.messages[-1]['audio']) != None :
+        with st.sidebar: 
+            st.write(f'Total tokens: {num_tokens}')
+            
+            json_temp = {}
+            for i, msg in enumerate(st.session_state.messages):
+                json_temp[i] = {'role': msg['role'], 'content': msg['content'], 'type': 'text' if msg['audio'] is None else 'audio'}
+            
+            now = datetime.datetime.now()
+            date_now = now.strftime("%Y%m%d-%H%M%S.%f")
+            filename = f"{st.session_state.title[0]}_{date_now}"
+            json_file = json.dumps(json_temp)
+            
+            st.download_button(
+                label='Download Chat',
+                data=json_file,
+                file_name=f'{filename}.json'
             )
 
-            audio = b""
-            for chunk in response.iter_bytes(chunk_size=1024 * 1024):
-                audio += chunk
-
-            message_placeholder.audio(audio, format="audio/mp3")
-        st.session_state.messages.append({"role": "assistant", "content": prompt[4:], 'audio': audio})
-
-    else:
-        with st.chat_message("assistant"):
-            message_placeholder = st.empty()
-
-            if not browsing:
-                completion = get_completion()
-
-            else:
-                completion = get_completion(use_browsing=True)
-
-            full_response = get_stream_full_response(completion)
-            
-            if st.session_state.messages[-1]['audio'] != None:
-                message_placeholder.audio(full_response, format='audio/mp3')
-            else:
-                message_placeholder.markdown(full_response)
-
-if len(st.session_state.messages) > 1 and 'title' not in st.session_state:
-    st.session_state.title = []
-    create_chat_title()
-
-full_message = ""
-for message in st.session_state.messages:
-    full_message += message['content'] + " "
-
-num_tokens = num_tokens_from_string(full_message, "cl100k_base")
-
-if len(st.session_state.messages) != 0 and (st.session_state.messages[-1]['role'] == 'assistant' or st.session_state.messages[-1]['audio']) != None :
-    with st.sidebar: 
-        st.write(f'Total tokens: {num_tokens}')
-        
-        json_temp = {}
-        for i, msg in enumerate(st.session_state.messages):
-            json_temp[i] = {'role': msg['role'], 'content': msg['content'], 'type': 'text' if msg['audio'] is None else 'audio'}
-        
-        now = datetime.datetime.now()
-        date_now = now.strftime("%Y%m%d-%H%M%S.%f")
-        filename = f"{st.session_state.title[0]}_{date_now}"
-        json_file = json.dumps(json_temp)
-        
-        st.download_button(
-            label='Download Chat',
-            data=json_file,
-            file_name=f'{filename}.json'
-        )
-
-# except:
-#     pass
+except:
+    pass
