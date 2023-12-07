@@ -245,10 +245,10 @@ def get_stream_full_response(completion):
         function_arg = json.loads(tool_calls_args[i])
         if function_name == 'scrape_gpt':
 
-            with st.spinner(f'*Browsing Google... ({list(function_arg.values())[0]})*'):
+            with message_placeholder.status(f'*Searching for knowledge...*', expanded=True) as status:
+                st.markdown(f'Browsing Google for **{list(function_arg.values())[0]}**')
                 function_response = function_to_call(**function_arg)
-            
-            message_placeholder.markdown(f'*Finish retreiving knowledge. Total context tokens: {num_tokens_from_string(function_response, "cl100k_base")}*')
+                status.update(label=f'*Finish retreiving knowledge. Total context tokens: {num_tokens_from_string(function_response, "cl100k_base")}*', state='complete', expanded=False)
 
             st.session_state.messages.append(
                 {
@@ -382,14 +382,14 @@ try:
         if len(st.session_state.messages) == 0:
             
             if browsing:
-                browsing_prompt = 'You have ability to browse the internet using function. If you are unsure about your answer, or the user ask for real time factual data, use your ability to search the internet. Provide a good and optimized search query when searching the internet. If system with "QUERY" and "TOOL RESPONSE", that\'s the response from the tool that you call, so you don\'t need to call the browsing function. All of the answers from the internet is updated, so don\'t assume your knowledge is true because it isn\'t updated. If user ask you for follow up question that are cannot be answered from the previous web searching, then search it again through the internet. If you want to call internet browsing and other functions, prioritize to call browsing function first over any other answers to generate answers.'
+                browsing_prompt = 'You have ability to browse the internet using function. If you are unsure about your answer, or the user ask for real time factual data, use your ability to search the internet. Provide a good and optimized search query when searching the internet. If system with "QUERY" and "TOOL RESPONSE", that\'s the response from the tool that you call, so you don\'t need to call the browsing function. All of the answers from the internet is updated, so don\'t assume your knowledge is true because it isn\'t updated. If user ask you for follow up question that are cannot be answered from the previous web searching, then search it again through the internet. If you want to call internet browsing and other functions, prioritize to call browsing function first over any other answers to generate answers.\n\nFor additional context: Current date is {datetime.datetime.now().strftime("%d/%m/%Y")}, with day/month/year format.'
             else:
                 browsing_prompt = "You don't have ability to browse the internet by default, unless there's a prompt after this telling you that you are able. Don't tell the user that u have ability to browse the internet because it's a fake response"
             
             if speak:
                 st.session_state.speak_prompt = "ALWAYS use speech (use function tools) for every user's question or input. Whatever user's input, SPEAK!"
             else:
-                st.session_state.speak_prompt = f"Speak if the user want you to speak."
+                st.session_state.speak_prompt = f"DON'T speak if the user not telling you to speak."
 
             system_prompt = f"""You are a helpful and respectful AI assistant.\n\n{browsing_prompt}.\n\nYou have the ability to speak or generate speech through function for answering user's questions. {st.session_state.speak_prompt}"""
 
