@@ -217,7 +217,8 @@ def get_stream_full_response(completion):
                 
                 return full_response
             else:
-                message_placeholder.markdown(full_response + "▌")
+                typing_icon = ' ⚪' if select_model else "▌"
+                message_placeholder.markdown(full_response + typing_icon)
         
         elif content == None and full_response == "":
             tool_calls = response.choices[0].delta.tool_calls
