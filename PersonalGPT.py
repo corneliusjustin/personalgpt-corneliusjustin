@@ -390,7 +390,7 @@ try:
             if speak:
                 st.session_state.speak_prompt = "ALWAYS use speech (use function tools) for every user's question or input. Whatever user's input, SPEAK!"
             else:
-                st.session_state.speak_prompt = f"DON'T speak if the user not telling you to speak."
+                st.session_state.speak_prompt = f"You don't have the ability to speak, so don't use speech."
 
             system_prompt = f"""You are a helpful and respectful AI assistant.\n\n{browsing_prompt}.\n\nYou have the ability to speak or generate speech through function for answering user's questions. {st.session_state.speak_prompt}"""
 
